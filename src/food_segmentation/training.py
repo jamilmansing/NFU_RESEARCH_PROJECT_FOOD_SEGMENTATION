@@ -103,6 +103,7 @@ def run_full_training(
     checkpoint: str = MIT_B0_CHECKPOINT,
     epochs: int = 50,
     batch_size: int = 2,
+    eval_batch_size: int = 1,
     learning_rate: float = 6e-5,
     image_size: int = 512,
     weight_decay: float = 0.01,
@@ -163,7 +164,8 @@ def run_full_training(
     print(
         "Starting training: "
         f"{len(train_dataset)} train samples, {len(eval_dataset)} val samples, "
-        f"{epochs} epochs, batch size {batch_size}, image size {image_size}."
+        f"{epochs} epochs, train batch size {batch_size}, "
+        f"eval batch size {eval_batch_size}, image size {image_size}."
     )
 
     args = TrainingArguments(
@@ -172,9 +174,10 @@ def run_full_training(
         learning_rate=learning_rate,
         weight_decay=weight_decay,
         per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
+        per_device_eval_batch_size=eval_batch_size,
         eval_strategy="epoch",
         save_strategy="epoch",
+        eval_accumulation_steps=1,
         save_total_limit=3,
         load_best_model_at_end=True,
         metric_for_best_model="mean_iou",
@@ -196,6 +199,7 @@ def run_full_training(
         eval_dataset=eval_dataset,
         data_collator=segmentation_collate_fn,
         compute_metrics=build_compute_metrics(num_labels=len(id2label), id2label=id2label),
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         callbacks=[ConsoleProgressCallback(logging_steps=logging_steps)],
     )
 
@@ -244,19 +248,9 @@ class ConsoleProgressCallback(TrainerCallback):
 
 def build_compute_metrics(num_labels: int, id2label: dict[int, str]):
     def compute_metrics(eval_prediction) -> dict[str, float]:
-        logits, labels = eval_prediction
-        if isinstance(logits, tuple):
-            logits = logits[0]
-
-        logits_tensor = torch.from_numpy(np.asarray(logits))
+        predictions, labels = eval_prediction
+        predictions = np.asarray(predictions)
         labels_array = np.asarray(labels)
-        resized_logits = F.interpolate(
-            logits_tensor,
-            size=labels_array.shape[-2:],
-            mode="bilinear",
-            align_corners=False,
-        )
-        predictions = resized_logits.argmax(dim=1).numpy()
 
         metrics = segmentation_metrics(
             predictions=predictions,
@@ -268,6 +262,20 @@ def build_compute_metrics(num_labels: int, id2label: dict[int, str]):
         return metrics
 
     return compute_metrics
+
+
+def preprocess_logits_for_metrics(logits, labels):
+    """Store class predictions instead of full float logits during evaluation."""
+    if isinstance(logits, tuple):
+        logits = logits[0]
+
+    resized_logits = F.interpolate(
+        logits,
+        size=labels.shape[-2:],
+        mode="bilinear",
+        align_corners=False,
+    )
+    return resized_logits.argmax(dim=1)
 
 
 def segmentation_metrics(

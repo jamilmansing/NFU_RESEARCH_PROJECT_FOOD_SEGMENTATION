@@ -81,6 +81,7 @@ uv run python scripts/train.py `
   --output-dir outputs/segformer-mit-b0-food `
   --epochs 50 `
   --batch-size 2 `
+  --eval-batch-size 1 `
   --learning-rate 6e-5 `
   --image-size 512 `
   --weight-decay 0.01

@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs.")
     parser.add_argument("--batch-size", type=int, default=2, help="Per-device batch size.")
+    parser.add_argument("--eval-batch-size", type=int, default=1, help="Per-device eval batch size.")
     parser.add_argument("--learning-rate", type=float, default=6e-5, help="Trainer learning rate.")
     parser.add_argument("--image-size", type=int, default=512, help="Square image/mask size.")
     parser.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay.")
@@ -54,6 +55,7 @@ def main() -> None:
         checkpoint=args.checkpoint,
         epochs=args.epochs,
         batch_size=args.batch_size,
+        eval_batch_size=args.eval_batch_size,
         learning_rate=args.learning_rate,
         image_size=args.image_size,
         weight_decay=args.weight_decay,
