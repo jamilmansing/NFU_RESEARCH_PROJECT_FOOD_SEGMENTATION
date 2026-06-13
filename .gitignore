@@ -1,0 +1,40 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local datasets
+data/
+datasets/
+
+# Training outputs and model artifacts
+outputs/
+checkpoints/
+runs/
+wandb/
+*.onnx
+*.pt
+*.pth
+*.safetensors
+
+# Logs and local environment files
+*.log
+.env
+.env.*
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+pyproject.toml
+uv.lock
+陳文耀 - F1142024 - HW0602.py
+simple_neural_network.py
+.python-version

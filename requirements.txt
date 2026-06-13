@@ -1,0 +1,15 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+
+accelerate
+datasets
+evaluate
+numpy
+onnx
+onnxruntime
+onnxscript
+pillow
+scikit-learn
+torch
+torchvision
+tqdm
+transformers
