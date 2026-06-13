@@ -110,8 +110,7 @@ class SegmentationCsvDataset(Dataset):
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         record = self.records[index]
         image = Image.open(record.image_path).convert("RGB")
-        mask = Image.open(record.mask_path)
-        mask_array = self._load_mask_array(mask, record.mask_path)
+        mask_array = self._load_mask_array(record.mask_path)
 
         if self.augment and random() < 0.5:
             image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
@@ -136,27 +135,12 @@ class SegmentationCsvDataset(Dataset):
             "labels": encoded["labels"].squeeze(0).long(),
         }
 
-    def _load_mask_array(self, mask: Image.Image, mask_path: Path) -> np.ndarray:
-        if mask.mode in {"RGB", "RGBA", "P"}:
-            if self.color_to_label_id:
-                return rgb_mask_to_label_ids(mask.convert("RGB"), self.color_to_label_id, mask_path)
-
-            if mask.mode == "P":
-                mask_array = np.array(mask, dtype=np.int64)
-            else:
-                raise ValueError(
-                    f"Mask {mask_path} is RGB/RGBA but labels.json does not include colors. "
-                    "Add color entries or convert masks to class-id grayscale."
-                )
-        else:
-            mask_array = np.array(mask.convert("L"), dtype=np.int64)
-
-        unknown_ids = set(np.unique(mask_array).tolist()) - self.valid_label_ids
-        if unknown_ids:
-            raise ValueError(
-                f"Mask {mask_path} contains label ids not in labels.json: {sorted(unknown_ids)}"
-            )
-        return mask_array
+    def _load_mask_array(self, mask_path: Path) -> np.ndarray:
+        return load_mask_array(
+            mask_path=mask_path,
+            valid_label_ids=self.valid_label_ids,
+            color_to_label_id=self.color_to_label_id,
+        )
 
 
 def segmentation_collate_fn(batch: list[dict[str, torch.Tensor]]) -> dict[str, torch.Tensor]:
@@ -193,6 +177,37 @@ def rgb_mask_to_label_ids(
     return unique_label_ids[inverse].reshape(mask_rgb.shape[:2])
 
 
+def load_mask_array(
+    mask_path: Path,
+    valid_label_ids: set[int],
+    color_to_label_id: dict[tuple[int, int, int], int],
+) -> np.ndarray:
+    if mask_path.suffix.lower() == ".npy":
+        mask_array = np.load(mask_path).astype(np.int64)
+    else:
+        with Image.open(mask_path) as mask:
+            if mask.mode in {"RGB", "RGBA"}:
+                if not color_to_label_id:
+                    raise ValueError(
+                        f"Mask {mask_path} is RGB/RGBA but labels.json does not include colors."
+                    )
+                return rgb_mask_to_label_ids(mask.convert("RGB"), color_to_label_id, mask_path)
+
+            if mask.mode == "P" and color_to_label_id:
+                return rgb_mask_to_label_ids(mask.convert("RGB"), color_to_label_id, mask_path)
+
+            # Preserve class IDs for 8-bit, 16-bit, and integer masks.
+            mask_array = np.array(mask, dtype=np.int64)
+
+    if mask_array.ndim != 2:
+        raise ValueError(f"Mask {mask_path} must be single-channel or RGB color-coded.")
+
+    unknown_ids = set(np.unique(mask_array).tolist()) - valid_label_ids
+    if unknown_ids:
+        raise ValueError(f"Mask {mask_path} contains label ids not in labels.json: {sorted(unknown_ids)}")
+    return mask_array
+
+
 def pack_rgb(mask_rgb: np.ndarray) -> np.ndarray:
     rgb = mask_rgb.astype(np.uint32)
     return (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]
@@ -212,6 +227,10 @@ def validate_mask_labels(
     valid_label_ids: set[int],
     color_to_label_id: dict[tuple[int, int, int], int],
 ) -> None:
+    if mask_path.suffix.lower() == ".npy":
+        load_mask_array(mask_path, valid_label_ids, color_to_label_id)
+        return
+
     if mask.mode in {"RGB", "RGBA"}:
         if not color_to_label_id:
             raise ValueError(
@@ -224,7 +243,10 @@ def validate_mask_labels(
         rgb_mask_to_label_ids(mask.convert("RGB"), color_to_label_id, mask_path)
         return
 
-    mask_array = np.array(mask.convert("L"), dtype=np.int64)
+    mask_array = np.array(mask, dtype=np.int64)
+    if mask_array.ndim != 2:
+        raise ValueError(f"Mask {mask_path} must be single-channel or RGB color-coded.")
+
     unknown_ids = set(np.unique(mask_array).tolist()) - valid_label_ids
     if unknown_ids:
         raise ValueError(f"Mask {mask_path} contains label ids not in labels.json: {sorted(unknown_ids)}")

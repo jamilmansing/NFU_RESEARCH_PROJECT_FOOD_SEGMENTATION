@@ -64,6 +64,27 @@ The loader converts each RGB mask pixel to the matching label id before training
 
 Class `0` is treated as a real background class, so the processor uses `do_reduce_labels=False`.
 
+## Optional Mask Preconversion
+
+You can train directly from RGB masks, but preconverting them once can reduce CPU work during every epoch.
+
+```powershell
+uv run python scripts/preconvert_masks.py `
+  --manifest data/first_dataset/manifest.csv `
+  --labels configs/labels.json `
+  --output-dir data/first_dataset/semantic_class_id `
+  --output-manifest data/first_dataset/manifest_class_id.csv `
+  --format auto
+```
+
+`auto` writes 8-bit PNG masks for up to 256 labels and 16-bit PNG masks for larger label sets.
+
+Then train using the converted manifest:
+
+```powershell
+uv run python scripts/train.py --manifest data/first_dataset/manifest_class_id.csv --labels configs/labels.json --num-workers 2
+```
+
 ## Full Training
 
 Run full epoch-based training with MiT-B0 as the SegFormer backbone:
@@ -84,7 +105,8 @@ uv run python scripts/train.py `
   --eval-batch-size 1 `
   --learning-rate 6e-5 `
   --image-size 512 `
-  --weight-decay 0.01
+  --weight-decay 0.01 `
+  --num-workers 2
 ```
 
 The training script saves checkpoints every epoch, keeps the best checkpoint by validation `mean_iou`, and writes the final Hugging Face model here:

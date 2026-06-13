@@ -38,6 +38,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-size", type=int, default=512, help="Square image/mask size.")
     parser.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay.")
     parser.add_argument("--logging-steps", type=int, default=10, help="Print progress every N steps.")
+    parser.add_argument("--num-workers", type=int, default=0, help="DataLoader worker processes.")
+    parser.add_argument(
+        "--prefetch-factor",
+        type=int,
+        default=None,
+        help="Batches prefetched per DataLoader worker. Only used when num workers > 0.",
+    )
+    parser.add_argument(
+        "--persistent-workers",
+        action="store_true",
+        help="Keep DataLoader workers alive between epochs. Uses more RAM.",
+    )
     parser.add_argument(
         "--resume-from-checkpoint",
         default=None,
@@ -61,6 +73,9 @@ def main() -> None:
         weight_decay=args.weight_decay,
         resume_from_checkpoint=args.resume_from_checkpoint,
         logging_steps=args.logging_steps,
+        num_workers=args.num_workers,
+        prefetch_factor=args.prefetch_factor,
+        persistent_workers=args.persistent_workers,
     )
     print(f"Saved final Hugging Face model to: {final_dir}")
 

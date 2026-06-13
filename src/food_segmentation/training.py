@@ -109,6 +109,9 @@ def run_full_training(
     weight_decay: float = 0.01,
     resume_from_checkpoint: str | Path | None = None,
     logging_steps: int = 10,
+    num_workers: int = 0,
+    prefetch_factor: int | None = None,
+    persistent_workers: bool = False,
 ) -> Path:
     """Train SegFormer with a MiT-B0 backbone and save a deployable HF model."""
     output_dir = Path(output_dir)
@@ -165,7 +168,8 @@ def run_full_training(
         "Starting training: "
         f"{len(train_dataset)} train samples, {len(eval_dataset)} val samples, "
         f"{epochs} epochs, train batch size {batch_size}, "
-        f"eval batch size {eval_batch_size}, image size {image_size}."
+        f"eval batch size {eval_batch_size}, image size {image_size}, "
+        f"num workers {num_workers}."
     )
 
     args = TrainingArguments(
@@ -186,6 +190,10 @@ def run_full_training(
         logging_first_step=True,
         logging_steps=logging_steps,
         disable_tqdm=False,
+        dataloader_num_workers=num_workers,
+        dataloader_pin_memory=True,
+        dataloader_persistent_workers=persistent_workers if num_workers > 0 else False,
+        dataloader_prefetch_factor=prefetch_factor if num_workers > 0 else None,
         remove_unused_columns=False,
         report_to=[],
         fp16=False,
