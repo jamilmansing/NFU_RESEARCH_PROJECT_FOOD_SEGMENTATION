@@ -172,20 +172,38 @@ def rgb_mask_to_label_ids(
     mask_path: Path,
 ) -> np.ndarray:
     mask_rgb = np.array(mask, dtype=np.uint8)
-    label_mask = np.full(mask_rgb.shape[:2], fill_value=-1, dtype=np.int64)
+    packed_mask = pack_rgb(mask_rgb)
+    unique_colors, inverse = np.unique(packed_mask.reshape(-1), return_inverse=True)
 
-    for rgb, label_id in color_to_label_id.items():
-        color_matches = np.all(mask_rgb == np.array(rgb, dtype=np.uint8), axis=-1)
-        label_mask[color_matches] = label_id
+    packed_color_to_label_id = {
+        pack_rgb_tuple(rgb): label_id
+        for rgb, label_id in color_to_label_id.items()
+    }
+    unique_label_ids = np.full(unique_colors.shape, fill_value=-1, dtype=np.int64)
+    for index, packed_color in enumerate(unique_colors):
+        unique_label_ids[index] = packed_color_to_label_id.get(int(packed_color), -1)
 
-    if np.any(label_mask == -1):
-        unknown_colors = np.unique(mask_rgb[label_mask == -1].reshape(-1, 3), axis=0)
-        preview = [tuple(int(channel) for channel in color) for color in unknown_colors[:10]]
+    unknown_packed_colors = unique_colors[unique_label_ids == -1]
+    if unknown_packed_colors.size:
+        preview = [unpack_rgb(int(color)) for color in unknown_packed_colors[:10]]
         raise ValueError(
             f"Mask {mask_path} contains RGB colors not in labels.json: {preview}"
         )
 
-    return label_mask
+    return unique_label_ids[inverse].reshape(mask_rgb.shape[:2])
+
+
+def pack_rgb(mask_rgb: np.ndarray) -> np.ndarray:
+    rgb = mask_rgb.astype(np.uint32)
+    return (rgb[..., 0] << 16) | (rgb[..., 1] << 8) | rgb[..., 2]
+
+
+def pack_rgb_tuple(rgb: tuple[int, int, int]) -> int:
+    return (int(rgb[0]) << 16) | (int(rgb[1]) << 8) | int(rgb[2])
+
+
+def unpack_rgb(value: int) -> tuple[int, int, int]:
+    return ((value >> 16) & 255, (value >> 8) & 255, value & 255)
 
 
 def validate_mask_labels(
