@@ -36,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--learning-rate", type=float, default=6e-5, help="Trainer learning rate.")
     parser.add_argument("--image-size", type=int, default=512, help="Square image/mask size.")
     parser.add_argument("--weight-decay", type=float, default=0.01, help="Weight decay.")
+    parser.add_argument("--logging-steps", type=int, default=10, help="Print progress every N steps.")
     parser.add_argument(
         "--resume-from-checkpoint",
         default=None,
@@ -57,6 +58,7 @@ def main() -> None:
         image_size=args.image_size,
         weight_decay=args.weight_decay,
         resume_from_checkpoint=args.resume_from_checkpoint,
+        logging_steps=args.logging_steps,
     )
     print(f"Saved final Hugging Face model to: {final_dir}")
 

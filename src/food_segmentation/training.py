@@ -12,6 +12,7 @@ from transformers import (
     AutoImageProcessor,
     AutoModelForSemanticSegmentation,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
 
@@ -106,11 +107,13 @@ def run_full_training(
     image_size: int = 512,
     weight_decay: float = 0.01,
     resume_from_checkpoint: str | Path | None = None,
+    logging_steps: int = 10,
 ) -> Path:
     """Train SegFormer with a MiT-B0 backbone and save a deployable HF model."""
     output_dir = Path(output_dir)
     final_dir = output_dir / "final"
 
+    print("Loading labels...", flush=True)
     id2label, label2id = load_label_maps(labels_path)
     color_to_label_id = load_label_colors(labels_path)
     valid_label_ids = set(id2label)
@@ -121,6 +124,7 @@ def run_full_training(
         color_to_label_id=color_to_label_id,
     )
 
+    print(f"Loading processor and model from {checkpoint}...", flush=True)
     processor = AutoImageProcessor.from_pretrained(
         checkpoint,
         do_reduce_labels=False,
@@ -137,6 +141,7 @@ def run_full_training(
         ignore_mismatched_sizes=True,
     )
 
+    print("Building train and validation datasets...", flush=True)
     train_dataset = SegmentationCsvDataset(
         manifest_path=manifest_path,
         split="train",
@@ -176,7 +181,7 @@ def run_full_training(
         greater_is_better=True,
         logging_strategy="steps",
         logging_first_step=True,
-        logging_steps=10,
+        logging_steps=logging_steps,
         disable_tqdm=False,
         remove_unused_columns=False,
         report_to=[],
@@ -191,11 +196,15 @@ def run_full_training(
         eval_dataset=eval_dataset,
         data_collator=segmentation_collate_fn,
         compute_metrics=build_compute_metrics(num_labels=len(id2label), id2label=id2label),
+        callbacks=[ConsoleProgressCallback(logging_steps=logging_steps)],
     )
 
+    print("Trainer is starting. If tqdm does not render, step logs will still print.", flush=True)
     train_result = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    print("Training complete. Running final evaluation...", flush=True)
     eval_metrics = trainer.evaluate()
 
+    print(f"Saving final model to {final_dir}...", flush=True)
     final_dir.mkdir(parents=True, exist_ok=True)
     trainer.save_model(str(final_dir))
     processor.save_pretrained(str(final_dir))
@@ -204,6 +213,33 @@ def run_full_training(
     _save_json(eval_metrics, final_dir / "eval_metrics.json")
 
     return final_dir
+
+
+class ConsoleProgressCallback(TrainerCallback):
+    def __init__(self, logging_steps: int) -> None:
+        self.logging_steps = max(logging_steps, 1)
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        print(f"Train begin: max_steps={state.max_steps}, epochs={args.num_train_epochs}.", flush=True)
+
+    def on_step_end(self, args, state, control, **kwargs):
+        if state.global_step == 1 or state.global_step % self.logging_steps == 0:
+            print(f"Training step {state.global_step}/{state.max_steps} complete.", flush=True)
+
+    def on_epoch_begin(self, args, state, control, **kwargs):
+        print(f"Epoch {state.epoch or 0:.2f} started.", flush=True)
+
+    def on_epoch_end(self, args, state, control, **kwargs):
+        print(f"Epoch {state.epoch or 0:.2f} ended.", flush=True)
+
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        if metrics:
+            mean_iou = metrics.get("eval_mean_iou")
+            eval_loss = metrics.get("eval_loss")
+            print(f"Evaluation complete: eval_loss={eval_loss}, eval_mean_iou={mean_iou}.", flush=True)
+
+    def on_save(self, args, state, control, **kwargs):
+        print(f"Checkpoint saved at step {state.global_step}.", flush=True)
 
 
 def build_compute_metrics(num_labels: int, id2label: dict[int, str]):

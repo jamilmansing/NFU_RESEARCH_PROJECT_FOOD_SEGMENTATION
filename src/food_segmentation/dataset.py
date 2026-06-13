@@ -59,12 +59,14 @@ def validate_manifest(
     splits: tuple[str, ...],
     valid_label_ids: set[int],
     color_to_label_id: dict[tuple[int, int, int], int] | None = None,
+    progress_interval: int = 100,
 ) -> None:
     """Validate dataset paths and mask labels before model loading."""
     color_to_label_id = color_to_label_id or {}
     for split in splits:
         records = load_manifest(manifest_path, split)
-        for record in records:
+        print(f"Validating {len(records)} {split} records from {manifest_path}...", flush=True)
+        for index, record in enumerate(records, start=1):
             if not record.image_path.exists():
                 raise FileNotFoundError(f"Image file not found: {record.image_path.resolve()}")
             if not record.mask_path.exists():
@@ -77,6 +79,9 @@ def validate_manifest(
                     valid_label_ids=valid_label_ids,
                     color_to_label_id=color_to_label_id,
                 )
+            if progress_interval > 0 and index % progress_interval == 0:
+                print(f"Validated {index}/{len(records)} {split} records...", flush=True)
+        print(f"Finished validating {split} split.", flush=True)
 
 
 class SegmentationCsvDataset(Dataset):
