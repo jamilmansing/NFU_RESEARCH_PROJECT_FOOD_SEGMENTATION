@@ -155,6 +155,11 @@ def run_full_training(
         image_size=image_size,
         augment=False,
     )
+    print(
+        "Starting training: "
+        f"{len(train_dataset)} train samples, {len(eval_dataset)} val samples, "
+        f"{epochs} epochs, batch size {batch_size}, image size {image_size}."
+    )
 
     args = TrainingArguments(
         output_dir=str(output_dir),
@@ -169,7 +174,10 @@ def run_full_training(
         load_best_model_at_end=True,
         metric_for_best_model="mean_iou",
         greater_is_better=True,
+        logging_strategy="steps",
+        logging_first_step=True,
         logging_steps=10,
+        disable_tqdm=False,
         remove_unused_columns=False,
         report_to=[],
         fp16=False,
