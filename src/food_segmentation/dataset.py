@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
+from random import random
 
 import numpy as np
 import torch
@@ -20,6 +21,9 @@ class SegmentationRecord:
 def load_manifest(manifest_path: str | Path, split: str) -> list[SegmentationRecord]:
     """Load image/mask rows from a CSV manifest."""
     path = Path(manifest_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Manifest file not found: {path.resolve()}")
+
     base_dir = path.parent
     records: list[SegmentationRecord] = []
 
@@ -50,6 +54,31 @@ def load_manifest(manifest_path: str | Path, split: str) -> list[SegmentationRec
     return records
 
 
+def validate_manifest(
+    manifest_path: str | Path,
+    splits: tuple[str, ...],
+    valid_label_ids: set[int],
+    color_to_label_id: dict[tuple[int, int, int], int] | None = None,
+) -> None:
+    """Validate dataset paths and mask labels before model loading."""
+    color_to_label_id = color_to_label_id or {}
+    for split in splits:
+        records = load_manifest(manifest_path, split)
+        for record in records:
+            if not record.image_path.exists():
+                raise FileNotFoundError(f"Image file not found: {record.image_path.resolve()}")
+            if not record.mask_path.exists():
+                raise FileNotFoundError(f"Mask file not found: {record.mask_path.resolve()}")
+
+            with Image.open(record.mask_path) as mask:
+                validate_mask_labels(
+                    mask=mask,
+                    mask_path=record.mask_path,
+                    valid_label_ids=valid_label_ids,
+                    color_to_label_id=color_to_label_id,
+                )
+
+
 class SegmentationCsvDataset(Dataset):
     """CSV-backed semantic segmentation dataset for SegFormer."""
 
@@ -60,11 +89,15 @@ class SegmentationCsvDataset(Dataset):
         processor,
         valid_label_ids: set[int],
         color_to_label_id: dict[tuple[int, int, int], int] | None = None,
+        image_size: int = 512,
+        augment: bool = False,
     ) -> None:
         self.records = load_manifest(manifest_path, split)
         self.processor = processor
         self.valid_label_ids = valid_label_ids
         self.color_to_label_id = color_to_label_id or {}
+        self.image_size = image_size
+        self.augment = augment
 
     def __len__(self) -> int:
         return len(self.records)
@@ -74,6 +107,10 @@ class SegmentationCsvDataset(Dataset):
         image = Image.open(record.image_path).convert("RGB")
         mask = Image.open(record.mask_path)
         mask_array = self._load_mask_array(mask, record.mask_path)
+
+        if self.augment and random() < 0.5:
+            image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            mask_array = np.fliplr(mask_array).copy()
 
         unknown_ids = set(np.unique(mask_array).tolist()) - self.valid_label_ids
         if unknown_ids:
@@ -85,6 +122,7 @@ class SegmentationCsvDataset(Dataset):
         encoded = self.processor(
             images=image,
             segmentation_maps=mask_array,
+            size={"height": self.image_size, "width": self.image_size},
             return_tensors="pt",
         )
 
@@ -143,6 +181,30 @@ def rgb_mask_to_label_ids(
         )
 
     return label_mask
+
+
+def validate_mask_labels(
+    mask: Image.Image,
+    mask_path: Path,
+    valid_label_ids: set[int],
+    color_to_label_id: dict[tuple[int, int, int], int],
+) -> None:
+    if mask.mode in {"RGB", "RGBA"}:
+        if not color_to_label_id:
+            raise ValueError(
+                f"Mask {mask_path} is RGB/RGBA but labels.json does not include colors."
+            )
+        rgb_mask_to_label_ids(mask.convert("RGB"), color_to_label_id, mask_path)
+        return
+
+    if mask.mode == "P" and color_to_label_id:
+        rgb_mask_to_label_ids(mask.convert("RGB"), color_to_label_id, mask_path)
+        return
+
+    mask_array = np.array(mask.convert("L"), dtype=np.int64)
+    unknown_ids = set(np.unique(mask_array).tolist()) - valid_label_ids
+    if unknown_ids:
+        raise ValueError(f"Mask {mask_path} contains label ids not in labels.json: {sorted(unknown_ids)}")
 
 
 def _resolve_path(base_dir: Path, value: str) -> Path:
