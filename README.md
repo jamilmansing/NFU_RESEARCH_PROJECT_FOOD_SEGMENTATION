@@ -148,3 +148,25 @@ Export a trained model:
 ```powershell
 uv run python scripts/export_onnx.py --kind mit-b0 --checkpoint outputs/segformer-mit-b0-food/final --labels configs/labels.json --output outputs/onnx/food_segformer.onnx
 ```
+
+## Held-Out Test Evaluation
+
+If your manifest has a `test` split, `scripts/train.py` evaluates it automatically after saving the final model. Metrics and plots are written to:
+
+```text
+outputs/segformer-mit-b0-food/analysis
+```
+
+Run evaluation manually:
+
+```powershell
+uv run python scripts/evaluate.py `
+  --model-dir outputs/segformer-mit-b0-food/final `
+  --manifest data/first_dataset/manifest_class_id.csv `
+  --labels configs/labels.json `
+  --output-dir outputs/segformer-mit-b0-food/analysis `
+  --split test `
+  --batch-size 1
+```
+
+The analysis output includes JSON metrics, per-class IoU CSV, and PNG plots for training loss, validation loss, validation mIoU, validation accuracy, test summary, and test per-class IoU.

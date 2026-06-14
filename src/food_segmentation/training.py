@@ -19,6 +19,7 @@ from transformers import (
 from food_segmentation.config import load_label_colors, load_label_maps
 from food_segmentation.dataset import (
     SegmentationCsvDataset,
+    load_manifest,
     segmentation_collate_fn,
     validate_manifest,
 )
@@ -112,6 +113,8 @@ def run_full_training(
     num_workers: int = 0,
     prefetch_factor: int | None = None,
     persistent_workers: bool = False,
+    run_test_eval: bool = True,
+    test_split: str = "test",
 ) -> Path:
     """Train SegFormer with a MiT-B0 backbone and save a deployable HF model."""
     output_dir = Path(output_dir)
@@ -223,6 +226,19 @@ def run_full_training(
     _copy_labels(labels_path, final_dir)
     _save_json(train_result.metrics, final_dir / "train_metrics.json")
     _save_json(eval_metrics, final_dir / "eval_metrics.json")
+    _run_final_analysis_if_available(
+        final_dir=final_dir,
+        output_dir=output_dir,
+        manifest_path=manifest_path,
+        labels_path=labels_path,
+        split=test_split,
+        batch_size=eval_batch_size,
+        image_size=image_size,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers,
+        enabled=run_test_eval,
+    )
 
     return final_dir
 
@@ -330,3 +346,46 @@ def _save_json(data: dict[str, float], path: Path) -> None:
 
 def _metric_name(label: str) -> str:
     return "".join(character if character.isalnum() else "_" for character in label).strip("_")
+
+
+def _run_final_analysis_if_available(
+    final_dir: Path,
+    output_dir: Path,
+    manifest_path: str | Path,
+    labels_path: str | Path,
+    split: str,
+    batch_size: int,
+    image_size: int,
+    num_workers: int,
+    prefetch_factor: int | None,
+    persistent_workers: bool,
+    enabled: bool,
+) -> None:
+    if not enabled:
+        print("Skipping final test evaluation.", flush=True)
+        return
+
+    try:
+        load_manifest(manifest_path, split=split)
+    except ValueError:
+        print(f"No '{split}' split found. Skipping final test evaluation.", flush=True)
+        return
+
+    print(f"Running final evaluation on split '{split}'...", flush=True)
+    from food_segmentation.evaluation import plot_training_history, run_test_evaluation
+
+    analysis_dir = output_dir / "analysis"
+    run_test_evaluation(
+        model_dir=final_dir,
+        manifest_path=manifest_path,
+        labels_path=labels_path,
+        output_dir=analysis_dir,
+        split=split,
+        batch_size=batch_size,
+        image_size=image_size,
+        num_workers=num_workers,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers,
+        validate_data=True,
+    )
+    plot_training_history(output_dir, analysis_dir / "plots")

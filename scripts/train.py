@@ -50,6 +50,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Keep DataLoader workers alive between epochs. Uses more RAM.",
     )
+    parser.add_argument("--test-split", default="test", help="Held-out split to evaluate after training.")
+    parser.add_argument(
+        "--skip-test-eval",
+        action="store_true",
+        help="Do not run held-out test evaluation after training.",
+    )
     parser.add_argument(
         "--resume-from-checkpoint",
         default=None,
@@ -76,6 +82,8 @@ def main() -> None:
         num_workers=args.num_workers,
         prefetch_factor=args.prefetch_factor,
         persistent_workers=args.persistent_workers,
+        run_test_eval=not args.skip_test_eval,
+        test_split=args.test_split,
     )
     print(f"Saved final Hugging Face model to: {final_dir}")
 

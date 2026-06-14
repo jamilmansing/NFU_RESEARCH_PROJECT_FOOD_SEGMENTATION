@@ -3,6 +3,7 @@
 accelerate
 datasets
 evaluate
+matplotlib
 numpy
 onnx
 onnxruntime
