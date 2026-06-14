@@ -169,4 +169,4 @@ uv run python scripts/evaluate.py `
   --batch-size 1
 ```
 
-The analysis output includes JSON metrics, per-class IoU CSV, and PNG plots for training loss, validation loss, validation mIoU, validation accuracy, test summary, and test per-class IoU.
+The analysis output includes JSON metrics, a scalar metric summary CSV, per-class IoU CSV, and PNG plots for training loss, validation loss, validation mIoU, validation accuracy, test loss, test summary, and test per-class IoU.

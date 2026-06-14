@@ -95,9 +95,12 @@ def run_test_evaluation(
         prefix=split,
     )
     save_json(metrics, output_dir / f"{split}_metrics.json")
+    write_metric_summary(metrics, output_dir / f"{split}_summary.csv", prefix=split)
     write_per_class_iou(metrics, id2label, output_dir / f"{split}_per_class_iou.csv", prefix=split)
     plot_per_class_iou(metrics, id2label, plots_dir / f"{split}_per_class_iou.png", prefix=split)
     plot_metric_summary(metrics, plots_dir / f"{split}_summary.png", prefix=split)
+    plot_loss_summary(metrics, plots_dir / f"{split}_loss.png", prefix=split)
+    print_metric_summary(metrics, prefix=split)
     return metrics
 
 
@@ -279,6 +282,21 @@ def plot_metric_summary(metrics: dict[str, float], output_path: Path, prefix: st
     plt.close()
 
 
+def plot_loss_summary(metrics: dict[str, float], output_path: Path, prefix: str) -> None:
+    key = f"{prefix}_loss"
+    if key not in metrics:
+        return
+
+    plt.figure(figsize=(5, 5))
+    plt.bar([f"{prefix.title()} Loss"], [float(metrics[key])], color="#8f3f37")
+    plt.ylabel("Loss")
+    plt.title(f"{prefix.title()} Loss")
+    plt.grid(True, axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=160)
+    plt.close()
+
+
 def plot_per_class_iou(
     metrics: dict[str, float],
     id2label: dict[int, str],
@@ -313,6 +331,39 @@ def write_per_class_iou(
         writer = csv.DictWriter(file, fieldnames=["label_id", "label", "iou"])
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_metric_summary(metrics: dict[str, float], output_path: Path, prefix: str) -> None:
+    rows = metric_summary_rows(metrics, prefix)
+    with output_path.open("w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=["metric", "value"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def print_metric_summary(metrics: dict[str, float], prefix: str) -> None:
+    rows = metric_summary_rows(metrics, prefix)
+    if not rows:
+        return
+
+    print(f"{prefix.title()} metric summary:", flush=True)
+    for row in rows:
+        print(f"  {row['metric']}: {row['value']:.6f}", flush=True)
+
+
+def metric_summary_rows(metrics: dict[str, float], prefix: str) -> list[dict]:
+    preferred_keys = [
+        f"{prefix}_loss",
+        f"{prefix}_mean_iou",
+        f"{prefix}_mean_accuracy",
+        f"{prefix}_overall_accuracy",
+    ]
+    rows = []
+    for key in preferred_keys:
+        if key not in metrics:
+            continue
+        rows.append({"metric": key, "value": float(metrics[key])})
+    return rows
 
 
 def per_class_iou_rows(metrics: dict[str, float], id2label: dict[int, str], prefix: str) -> list[dict]:

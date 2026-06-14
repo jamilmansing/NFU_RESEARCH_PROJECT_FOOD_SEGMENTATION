@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    metrics = run_test_evaluation(
+    run_test_evaluation(
         model_dir=args.model_dir,
         manifest_path=args.manifest,
         labels_path=args.labels,
@@ -49,7 +49,6 @@ def main() -> None:
     )
     if args.training_run_dir:
         plot_training_history(args.training_run_dir, Path(args.output_dir) / "plots")
-    print(metrics)
 
 
 if __name__ == "__main__":
